@@ -1,0 +1,27 @@
+{
+  "appId": "",
+  "appDisplayName": "ryjansen-test-app3",
+  "description": null,
+  "environmentId": "1a773031-26c2-e329-a5dc-b294d178f80d",
+  "buildPath": "./dist",
+  "buildEntryPoint": "index.html",
+  "logoPath": "Default",
+  "localAppUrl": "http://localhost:3000/",
+  "connectionReferences": {},
+  "databaseReferences": {
+    "default.cds": {
+      "state": "Configured",
+      "instanceUrl": "https://orge8514c87.crm.dynamics.com/",
+      "webApiVersion": "v9.0",
+      "dataSources": {
+        "projects": {
+          "entitySetName": "alaug_projects",
+          "logicalName": "alaug_project",
+          "isHidden": false
+        }
+      },
+      "version": "v9.0",
+      "environmentVariableName": ""
+    }
+  }
+}
