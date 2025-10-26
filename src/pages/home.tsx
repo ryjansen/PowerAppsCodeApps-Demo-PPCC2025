@@ -1,3 +1,4 @@
+import { ModeToggle } from "@/components/mode-toggle"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,17 +33,52 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table"
 import { formatDate } from "date-fns"
-import { ArrowDown, ArrowUp, FolderKanban, Plus } from "lucide-react"
+import { ArrowDown, ArrowUp, FolderKanban, Plus, Search, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import { toast } from "sonner"
+
+export default function DashboardPage() {
+  return (
+    <div>
+      <Header />
+
+      {/* 1 - Empty */}
+      {/* <Card className="my-4">
+        <CardContent>
+          <h1 className="text-2xl">TODO: Build the app</h1>
+        </CardContent>
+      </Card> */}
+
+      {/* 3 - Projects Chart */}
+      <Card className="my-4">
+        <CardHeader>
+          <CardTitle>Projects by State</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ProjectsChart />
+        </CardContent>
+      </Card>
+      <Card className="my-4">
+        <CardHeader>
+          <CardTitle>All Projects</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ProjectsTable />
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+/****************************************************************
+ * REACT QUERY HOOKS
+ ****************************************************************/
 
 function useProjects() {
   return useQuery({
     queryKey: ["projects"],
     queryFn: async () => {
-      console.log("START: Alaug_projectsService.getAll");
-
       const res = await Alaug_projectsService.getAll({
         select: [
           "alaug_projectid",
@@ -57,9 +93,6 @@ function useProjects() {
         top: 200,
       })
 
-      console.log("END: Alaug_projectsService.getAll");
-      console.log("RESULT", res);
-      
       return res.data
     },
     initialData: [],
@@ -68,7 +101,7 @@ function useProjects() {
 }
 
 function useCreateProject() {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (projectData: Partial<Omit<Alaug_projects, "alaug_projectid">>) => {
@@ -83,48 +116,17 @@ function useCreateProject() {
   })
 }
 
-export default function DashboardPage() {
-  return (
-    <div>
-      <Header />
+function useDeleteProject() {
+  const queryClient = useQueryClient();
 
-      {/* 1 - Empty */}
-      {/* <Card className="my-4">
-        <CardContent>
-          <h1 className="text-2xl">TODO: Build the app</h1>
-        </CardContent>
-      </Card> */}
-
-      {/* 2 - JSON */}
-      {/* <Card className="my-4">
-        <CardContent>
-          <pre>{content}</pre>
-        </CardContent>
-      </Card> */}
-
-      {/* 2 - Projects Table */}
-      <Card className="my-4">
-        <CardContent>
-          <ProjectsTable />
-        </CardContent>
-      </Card>
-
-      {/* 3 - Projects Chart */}
-      <Card className="my-4">
-        <CardHeader>
-          <CardTitle>Projects by State</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ProjectsChart />
-        </CardContent>
-      </Card>
-      <Card className="my-4">
-        <CardContent>
-          <ProjectsTable />
-        </CardContent>
-      </Card>
-    </div>
-  )
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await Alaug_projectsService.delete(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] })
+    },
+  })
 }
 
 /****************************************************************
@@ -154,7 +156,6 @@ function Header() {
 /****************************************************************
  * PROJECTS TABLE
  ****************************************************************/
-
 const columns: ColumnDef<Alaug_projects>[] = [
   {
     accessorKey: "alaug_name",
@@ -224,6 +225,43 @@ const columns: ColumnDef<Alaug_projects>[] = [
       )
     },
   },
+  {
+    id: "actions",
+    header: "", // or "Actions" if you want a header title
+    cell: ({ row, table }) => {
+      const { deleteProject } = table.options.meta as {
+        deleteProject: ReturnType<typeof useDeleteProject>
+      };
+
+      const handleDeleteProject = async (id: string) => {
+        try {
+          await deleteProject.mutateAsync(id);
+          toast.success("Project deleted!");
+        } catch (err) {
+          toast.error(`Error deleting project: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+      };
+
+      return (
+        <div className="">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="cursor-pointer hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => handleDeleteProject(row.original.alaug_projectid)}
+            disabled={
+              deleteProject.isPending &&
+              deleteProject.variables === row.original.alaug_projectid
+            }
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      );
+    },
+    enableSorting: false,
+    enableHiding: false
+  }
 ];
 
 function ProjectsTable() {
@@ -236,6 +274,7 @@ function ProjectsTable() {
   const [addProjectDialogOpen, setAddProjectDialogOpen] = useState(false)
 
   const { data, isLoading, isError } = useProjects();
+  const deleteProject = useDeleteProject();
 
   const table = useReactTable<Alaug_projects>({
     data,
@@ -254,6 +293,9 @@ function ProjectsTable() {
       columnVisibility,
       rowSelection,
     },
+    meta: {
+      deleteProject
+    }
   });
 
   if (isError) return <div>Error</div>;
@@ -262,19 +304,30 @@ function ProjectsTable() {
   return (
     <div className="w-full">
       <div className="flex items-center justify-between gap-3 py-4">
-        <Input
-          autoComplete="off"
-          placeholder="Filter"
-          value={filter ?? ""}
-          onChange={(e) => {
-            setFilter(e.target.value)
-            table.setGlobalFilter(e.target.value)
-          }}
-          className="max-w-sm"
-        />
-        <div className="flex justify-end">
-          <Button className="bg-violet-500" onClick={() => setAddProjectDialogOpen(true)}>
-          <Plus className="h-4 w-4 relative top-px" />
+        <div className="text-xs md:text-sm text-muted-foreground bg-muted/40 px-2 py-1 rounded-full">
+          {data.length} tracked projects
+        </div>
+
+        <div className="flex items-center gap-2 ml-auto">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              autoComplete="off"
+              placeholder="Filter projects..."
+              value={filter ?? ""}
+              onChange={(e) => {
+                setFilter(e.target.value)
+                table.setGlobalFilter(e.target.value)
+              }}
+              className="pl-9 w-[200px]"
+            />
+          </div>
+
+          <Button
+            className="bg-violet-500 hover:bg-violet-600"
+            onClick={() => setAddProjectDialogOpen(true)}
+          >
+            <Plus className="h-4 w-4 relative top-px" />
             Add Project
           </Button>
         </div>
@@ -327,7 +380,10 @@ function ProjectsTable() {
                   {row.getVisibleCells().map((cell) => (
                     <TableCell 
                       key={cell.id} 
-                      className="align-top whitespace-normal wrap-break-words p-4">
+                          className={cn(
+                          "whitespace-normal wrap-break-words p-4 align-top",
+                          cell.column.id === "actions" && "pt-3 pb-1"
+                        )}>
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext()
@@ -552,8 +608,6 @@ export function ProjectsChart() {
     },
     []
   );
-
-  console.log("Chart Data:", chartData);
 
   return (
     <ChartContainer config={chartConfig} className="h-[180px] min-h-[180px] w-full">
