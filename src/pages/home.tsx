@@ -1,4 +1,3 @@
-import { ModeToggle } from "@/components/mode-toggle"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -44,14 +43,24 @@ export default function DashboardPage() {
       <Header />
 
       {/* 1 - Empty */}
-      {/* <Card className="my-4">
+      <Card className="my-4">
         <CardContent>
           <h1 className="text-2xl">TODO: Build the app</h1>
+        </CardContent>
+      </Card>
+
+      {/* 2 - Empty */}
+      {/* <Card className="my-4">
+        <CardHeader>
+          <CardTitle>All Projects</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ProjectsJSON />
         </CardContent>
       </Card> */}
 
       {/* 3 - Projects Chart */}
-      <Card className="my-4">
+      {/* <Card className="my-4">
         <CardHeader>
           <CardTitle>Projects by State</CardTitle>
         </CardHeader>
@@ -66,7 +75,7 @@ export default function DashboardPage() {
         <CardContent>
           <ProjectsTable />
         </CardContent>
-      </Card>
+      </Card> */}
     </div>
   )
 }
@@ -152,6 +161,23 @@ function Header() {
     </header>
   )
 }
+
+/****************************************************************
+ * PROJECTS JSON
+ ****************************************************************/
+function ProjectsJSON() {
+  const { data, isLoading, isError } = useProjects();
+
+  if (isError) return <div>Error</div>;
+  if (isLoading) return <div>Loading...</div>;
+
+  return (
+    <pre className="rounded-md bg-muted p-4">
+      {JSON.stringify(data, null, 2)}
+    </pre>
+  )
+}
+
 
 /****************************************************************
  * PROJECTS TABLE
