@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { Input } from "@/components/ui/input"
 import {
   Table,
@@ -28,6 +29,7 @@ import {
 import { formatDate } from "date-fns"
 import { ArrowDown, ArrowUp, FolderKanban } from "lucide-react"
 import { useState } from "react"
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
 function useProjects() {
   return useQuery({
@@ -66,7 +68,7 @@ export default function DashboardPage() {
   if (isLoading) {
     content = "Loading";
   } else if (isError) {
-    content = `Error: ${error}`;
+    content = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
   } else {
     content = JSON.stringify(data, null, 2);
   }
@@ -90,6 +92,21 @@ export default function DashboardPage() {
       </Card>
 
       {/* 2 - Projects Table */}
+      <Card className="my-4">
+        <CardContent>
+          <ProjectsTable />
+        </CardContent>
+      </Card>
+
+      {/* 3 - Projects Chart */}
+      <Card className="my-4">
+        <CardHeader>
+          <CardTitle>Projects by State</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ProjectsChart />
+        </CardContent>
+      </Card>
       <Card className="my-4">
         <CardContent>
           <ProjectsTable />
@@ -122,6 +139,7 @@ function Header() {
     </header>
   )
 }
+
 /****************************************************************
  * PROJECTS TABLE
  ****************************************************************/
@@ -150,19 +168,19 @@ const columns: ColumnDef<Alaug_projects>[] = [
       
       switch (value) {
         case "Not Started":
-          badgeClass = "bg-blue-100 text-blue-700";
+          badgeClass = "bg-slate-100 text-slate-700";
           break;
         case "Started":
-          badgeClass = "bg-gray-200 text-gray-700";
+          badgeClass = "bg-indigo-100 text-indigo-700";
           break;
         case "In Progress":
-          badgeClass = "bg-yellow-100 text-yellow-800";
+          badgeClass = "bg-amber-100 text-amber-700";
           break;
         case "At Risk":
-          badgeClass = "bg-red-100 text-red-700";
+          badgeClass = "bg-rose-100 text-rose-700";
           break;
         case "Complete":
-          badgeClass = "bg-green-100 text-green-700";
+          badgeClass = "bg-emerald-100 text-emerald-700";
           break;
       }
 
@@ -310,5 +328,69 @@ function ProjectsTable() {
         </Table>
       </div>
     </div>
+  )
+}
+
+/****************************************************************
+ * PROJECTS CHART
+ ****************************************************************/
+
+const chartConfig = {
+  "not-started":  { color: "#9ca3af" }, // slate-400 → neutral inactive
+  "started":      { color: "#6366f1" }, // indigo-500 → active start (matches header tone)
+  "in-progress":  { color: "#f59e0b" }, // amber-500 → warm progress
+  "at-risk":      { color: "#f43f5e" }, // rose-500 → warning/red accent
+  "complete":     { color: "#10b981" }, // emerald-500 → success
+} satisfies ChartConfig;
+
+const STATE_COLOR_MAP: Record<string, string> = {
+  "Not Started": "var(--color-not-started)",
+  "Started": "var(--color-started)",
+  "In Progress": "var(--color-in-progress)",
+  "At Risk": "var(--color-at-risk)",
+  "Complete": "var(--color-complete)",
+};
+
+export function ProjectsChart() {
+  const { data, isLoading, isError, error} = useProjects();
+
+  if (isLoading) {
+    return <div>Loading</div>;
+  } else if (isError) {
+    return <div>Error: {error instanceof Error ? error.message : 'Unknown error'}</div>;
+  }
+
+  const chartData = data.reduce<{ state: string; count: number; fill: string }[]>(
+    (acc, project) => {
+      const state = project.alaug_state || "Not Started";
+      const existing = acc.find((entry) => entry.state === state);
+
+      if (existing) {
+        existing.count += 1;
+      } else {
+        acc.push({
+          state,
+          count: 1,
+          fill: STATE_COLOR_MAP[state] || "var(--color-not-started)",
+        });
+      }
+
+      return acc;
+    },
+    []
+  );
+
+  console.log("Chart Data:", chartData);
+
+  return (
+    <ChartContainer config={chartConfig} className="h-[180px] min-h-[180px] w-full">
+      <BarChart data={chartData}>
+        <CartesianGrid vertical={false} strokeDasharray="3 3" />
+        <XAxis dataKey="state" tickLine={false} axisLine={false} />
+        <YAxis tickLine={false} axisLine={false} width={30} domain={[0, 'dataMax + 1']}allowDecimals={false} />
+        <ChartTooltip content={<ChartTooltipContent nameKey="state" />} />
+        <Bar dataKey="count" radius={[4, 4, 0, 0]} />
+      </BarChart>
+    </ChartContainer>
   )
 }
