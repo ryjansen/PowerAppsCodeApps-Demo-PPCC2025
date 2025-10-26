@@ -1,7 +1,11 @@
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -10,10 +14,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
 import { Alaug_projectsService } from "@/generated"
 import type { Alaug_projects } from "@/generated/models/Alaug_projectsModel"
 import { cn } from "@/lib/utils"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   flexRender,
   getCoreRowModel,
@@ -27,9 +32,10 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table"
 import { formatDate } from "date-fns"
-import { ArrowDown, ArrowUp, FolderKanban } from "lucide-react"
+import { ArrowDown, ArrowUp, FolderKanban, Plus } from "lucide-react"
 import { useState } from "react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { toast } from "sonner"
 
 function useProjects() {
   return useQuery({
@@ -61,35 +67,40 @@ function useProjects() {
   })
 }
 
+function useCreateProject() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (projectData: Partial<Omit<Alaug_projects, "alaug_projectid">>) => {
+      return await Alaug_projectsService.create(
+        projectData as Omit<Alaug_projects, "alaug_projectid">
+      )
+    },
+    onSuccess: () => {
+      // Invalidate project list to refetch
+      queryClient.invalidateQueries({ queryKey: ["projects"] })
+    },
+  })
+}
+
 export default function DashboardPage() {
-  const { data, isLoading, isError, error} = useProjects();
-
-  let content = "";
-  if (isLoading) {
-    content = "Loading";
-  } else if (isError) {
-    content = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
-  } else {
-    content = JSON.stringify(data, null, 2);
-  }
-
   return (
     <div>
       <Header />
 
       {/* 1 - Empty */}
-      <Card className="my-4">
+      {/* <Card className="my-4">
         <CardContent>
           <h1 className="text-2xl">TODO: Build the app</h1>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* 2 - JSON */}
-      <Card className="my-4">
+      {/* <Card className="my-4">
         <CardContent>
           <pre>{content}</pre>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* 2 - Projects Table */}
       <Card className="my-4">
@@ -222,6 +233,8 @@ function ProjectsTable() {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = useState({});
 
+  const [addProjectDialogOpen, setAddProjectDialogOpen] = useState(false)
+
   const { data, isLoading, isError } = useProjects();
 
   const table = useReactTable<Alaug_projects>({
@@ -248,18 +261,27 @@ function ProjectsTable() {
   
   return (
     <div className="w-full">
-      <div className="flex items-center py-4">
+      <div className="flex items-center justify-between gap-3 py-4">
         <Input
           autoComplete="off"
           placeholder="Filter"
           value={filter ?? ""}
-          onChange={(event) => {
-            setFilter(event.target.value);
-            table.setGlobalFilter(event.target.value);
+          onChange={(e) => {
+            setFilter(e.target.value)
+            table.setGlobalFilter(e.target.value)
           }}
           className="max-w-sm"
         />
+        <div className="flex justify-end">
+          <Button className="bg-violet-500" onClick={() => setAddProjectDialogOpen(true)}>
+          <Plus className="h-4 w-4 relative top-px" />
+            Add Project
+          </Button>
+        </div>
       </div>
+
+      <AddProjectDialog open={addProjectDialogOpen} onOpenChange={setAddProjectDialogOpen} />
+
       <div className="overflow-hidden rounded-md border">
         <Table>
           <TableHeader>
@@ -328,6 +350,157 @@ function ProjectsTable() {
         </Table>
       </div>
     </div>
+  )
+}
+
+/****************************************************************
+ * ADD PROJECT DIALOG
+ ****************************************************************/
+
+function AddProjectDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  type ProjectState = "Not Started" | "Started" | "In Progress" | "At Risk" | "Complete"
+
+  const createProject = useCreateProject();
+
+  const [projectData, setProjectData] = useState<{
+    name: string
+    description: string
+    owner: string
+    state: ProjectState | ""
+    startDate: string
+    endDate: string
+  }>({
+    name: "",
+    description: "",
+    owner: "",
+    state: "",
+    startDate: "",
+    endDate: "",
+  })
+
+  const handleChange = (field: string, value: string) =>
+    setProjectData((p) => ({ ...p, [field]: value }))
+
+  const handleSubmit = async () => {
+    const dataverseProject: Partial<Omit<Alaug_projects, "alaug_projectid">> = {
+      alaug_name: projectData.name,
+      alaug_description: projectData.description,
+      alaug_startdate: projectData.startDate
+        ? new Date(projectData.startDate).toISOString()
+        : undefined,
+      alaug_enddate: projectData.endDate
+        ? new Date(projectData.endDate).toISOString()
+        : undefined,
+      alaug_owner: projectData.owner,
+      alaug_state: projectData.state as ProjectState,
+    }
+
+    try {
+      await createProject.mutateAsync(dataverseProject)
+      onOpenChange(false);
+      setProjectData({ name: "", description: "", owner: "", state: "", startDate: "", endDate: "" });
+      toast.success("Project created successfully!");
+    } catch (err) {
+      toast.error(`Error creating project: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add Project</DialogTitle>
+          <DialogDescription>Enter details for the new project.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="grid gap-2">
+            <Label htmlFor="name">Name</Label>
+            <Input
+              id="name"
+              placeholder="Enter project name"
+              value={projectData.name}
+              onChange={(e) => handleChange("name", e.target.value)}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              placeholder="Describe the project"
+              value={projectData.description}
+              onChange={(e) => handleChange("description", e.target.value)}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="owner">Owner</Label>
+            <Input
+              id="owner"
+              placeholder="Owner name"
+              value={projectData.owner}
+              onChange={(e) => handleChange("owner", e.target.value)}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="state">State</Label>
+            <Select
+              value={projectData.state}
+              onValueChange={(v) => handleChange("state", v)}
+            >
+              <SelectTrigger id="state">
+                <SelectValue placeholder="Select project state" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Not Started">Not Started</SelectItem>
+                <SelectItem value="Started">Started</SelectItem>
+                <SelectItem value="In Progress">In Progress</SelectItem>
+                <SelectItem value="At Risk">At Risk</SelectItem>
+                <SelectItem value="Complete">Complete</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="startDate">Start Date</Label>
+              <Input
+                id="startDate"
+                type="date"
+                value={projectData.startDate}
+                onChange={(e) => handleChange("startDate", e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="endDate">End Date</Label>
+              <Input
+                id="endDate"
+                type="date"
+                value={projectData.endDate}
+                onChange={(e) => handleChange("endDate", e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button className="bg-violet-500" onClick={handleSubmit} disabled={createProject.isPending || !projectData.name}>
+            {createProject.isPending ? "Creating..." : "Create"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
